@@ -4,7 +4,7 @@ when not defined(ssl):
 import
   websocket, asyncdispatch, asyncnet, http, json, uri, net, common, tables
 
-from zip/zlib import uncompress
+when defined(discordCompress): from zip/zlib import uncompress
 
 let gateway* = get(api / "gateway")["url"].getStr().parseUri().hostname
 let ws* = waitFor newAsyncWebsocket(
@@ -26,7 +26,7 @@ template sendOp(op: int, data: untyped): auto =
 proc identify*() {.async.} =
   asyncCheck sendOp(2, {
     "token": token,
-    "compress": false,
+    "compress": when defined(discordCompress): true else: false,
     "large_threshold": 250,
     "properties": {
       "$os": hostOS,
@@ -67,8 +67,13 @@ proc read*() {.async.} =
       echo "Close code: ", cast[uint16](t.cstring)
       echo "Close reason: ", t[2..^1]
       return
-    of Opcode.Text, Opcode.Binary:
-      let text = if d.opcode == Opcode.Text: d.data else: uncompress(d.data)
+    of Opcode.Text:
+      let text = d.data
       let json = parseJson(text)
       process(json)
+    of Opcode.Binary:
+      when defined(discordCompress):
+        let text = uncompress(d.data)
+        if text.isNil: echo "Decompression failed"
+        process(parseJson(text))
     else: continue
