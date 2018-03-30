@@ -75,5 +75,5 @@ proc read*() {.async.} =
       when defined(discordCompress):
         let text = uncompress(d.data)
         if text.isNil: echo "Decompression failed"
-        process(parseJson(text))
+        else: process(parseJson(text))
     else: continue
