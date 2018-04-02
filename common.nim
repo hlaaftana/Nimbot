@@ -1,6 +1,6 @@
 import uri, os, tables, json
 
-type Listener* = proc(node: JsonNode)
+type Listener* = proc(node: JsonNode) {.noconv.}
 
 const
   discordUserAgent* = "NimBot (1.0 https://github.com/hlaaftana)"
@@ -14,7 +14,8 @@ let token* = "Bot " & paramStr(1).string
 
 var listeners* = initTable[string, seq[Listener]]()
 
-proc addListener*(e: string, a: Listener) =
+proc addListener*[T: proc](e: string, a: T) =
+  let a = cast[Listener](a)
   listeners.withValue(e, x) do:
     x[].add(a)
   do:

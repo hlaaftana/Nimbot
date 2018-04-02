@@ -11,7 +11,7 @@ let ws* = waitFor newAsyncWebsocket(
   "wss://" & gateway & ":443/?encoding=json&v=6",
   ctx=newContext(verifyMode=CVerifyNone))#, userAgent = WebsocketUserAgent & " " & discordUserAgent)
 
-var lastSeq*: BiggestInt = 0
+var lastSeq* = 0
 var sessionId*: string
 
 proc send*(data: JsonNode) {.async.} =
@@ -41,10 +41,10 @@ proc heartbeat*(interval: int) {.async.} =
     await sleepAsync(interval)
 
 proc process*(data: JsonNode) =
-  let op = data["op"].getNum()
+  let op = data["op"].getInt()
   case op
   of 0:
-    lastSeq = data["s"].getNum()
+    lastSeq = data["s"].getInt()
     let
       d = data["d"]
       t = data["t"].getStr()
@@ -52,7 +52,7 @@ proc process*(data: JsonNode) =
       for p in procs[]:
         p(d)
   of 10:
-    asyncCheck heartbeat(data["d"]["heartbeat_interval"].getNum.int)
+    asyncCheck heartbeat(data["d"]["heartbeat_interval"].getInt)
     asyncCheck identify()
   else: discard
 
@@ -64,7 +64,7 @@ proc read*() {.async.} =
       # this part is unreachable without commenting out the `of Opcode.Close` branch in readData in websocket/shared
       # after that to get the message you need to add Opcode.Close to the `of Opcode.Text, Opcode.Binary` branch
       let t = $d.data
-      echo "Close code: ", cast[uint16](addr t)
+      echo "Close code: ", cast[uint16](t.cstring)
       echo "Close reason: ", t[2..^1]
       return
     of Opcode.Text:
