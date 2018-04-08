@@ -1,4 +1,4 @@
-# Nimbot
+# porn
 Basic discord bot in Nim 0.18.0
 
 This works. Requires [websocket](https://github.com/niv/websocket.nim)@#HEAD as of March 29 2018, and for optional probably not working compression you can get [zip](https://github.com/nim-lang/zip) and hope for the best
