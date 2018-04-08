@@ -1,11 +1,18 @@
-import common, json, ws, asyncdispatch, http, uri, message
+import ws, asyncdispatch, messages, strutils
 
-proc handle(msg: MessageEvent) =
-  let content = msg.content
-  if content == "dab now":
-    asyncCheck msg.reply("\\*dabs now\\*")
+commands:
+  filter:
+    result = text.multiReplace(
+      ("@everyone", "@\u200beveryone"),
+      ("@here", "@\u200beveryone"))
 
-addListener(messageEvent, handle)
+  prefix "hey porn, "
+
+  on "dab now":
+    asyncCheck respond("\\*dabs now\\*")
+
+  on "say":
+    asyncCheck respond("ok i will say that, " & args)
 
 asyncCheck read()
 runForever()
