@@ -61,10 +61,9 @@ proc read* {.async.} =
     let d = await ws.sock.readData(true)
     case d.opcode
     of Opcode.Close:
-      # this part is unreachable without commenting out the `of Opcode.Close` branch in readData in websocket/shared
-      # after that to get the message you need to add Opcode.Close to the `of Opcode.Text, Opcode.Binary` branch
+      # this part is unreacheable now, cuz i added it to websocket.nim
       var t = $d.data
-      echo "Close code: ", cast[uint16](t[0].addr)
+      echo "Close code: ", cast[ptr uint16](t[0].addr)[]
       echo "Close reason: ", t[2..^1]
       return
     of Opcode.Text:
