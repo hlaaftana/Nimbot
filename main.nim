@@ -6,10 +6,10 @@ commands:
       ("@everyone", "@\u200beveryone"),
       ("@here", "@\u200beveryone"))
 
-  prefix "hey porn, "
+  prefix "hey lover, "
 
-  on "dab now":
-    asyncCheck respond("\\*dabs now\\*")
+  on "hows your day today":
+    asyncCheck respond("\\*good lol\\*")
 
   on "say":
     asyncCheck respond("ok i will say that, " & args)

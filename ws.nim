@@ -9,7 +9,7 @@ when defined(discordCompress): from zip/zlib import uncompress
 let gateway* = get(api / "gateway")["url"].getStr().parseUri().hostname
 let ws* = waitFor newAsyncWebsocket(
   "wss://" & gateway & ":443/?encoding=json&v=6",
-  ctx=newContext(verifyMode=CVerifyNone))#, userAgent = WebsocketUserAgent & " " & discordUserAgent)
+  ctx = newContext(verifyMode = CVerifyNone))
 
 var lastSeq* = 0
 var sessionId*: string
@@ -23,7 +23,7 @@ template sendOp(op: int, data: untyped): auto =
     "d": data
   })
 
-proc identify*() {.async.} =
+proc identify* {.async.} =
   asyncCheck sendOp(2, {
     "token": token,
     "compress": when defined(discordCompress): true else: false,
@@ -56,7 +56,7 @@ proc process*(data: JsonNode) =
     asyncCheck identify()
   else: discard
 
-proc read*() {.async.} =
+proc read* {.async.} =
   while not ws.sock.isClosed:
     let d = await ws.sock.readData(true)
     case d.opcode
@@ -70,12 +70,12 @@ proc read*() {.async.} =
     of Opcode.Text:
       let text = d.data
       let json = parseJson(text)
-      process(json)
+      process json
     of Opcode.Binary:
       when defined(discordCompress):
         let text = uncompress(d.data)
         if text.isNil:
           echo "Decompression failed, ignoring"
         else:
-          process(parseJson(decomp))
+          process parseJson(decomp)
     else: continue

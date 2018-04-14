@@ -8,7 +8,7 @@ const
   messageEvent* = "MESSAGE_CREATE"
 
 let config* = parseFile("bot.json")
-let token* = "Bot " & config["token"].getStr
+let token* = "Bot " & config["token"].getStr()
 
 var listeners* = initTable[string, seq[Listener]]()
 
