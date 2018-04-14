@@ -1,4 +1,4 @@
-import uri, os, tables, json
+import uri, tables, json
 
 type Listener* = proc(node: JsonNode)
 
@@ -7,8 +7,16 @@ const
   api* = "https://discordapp.com/api/v6/".parseUri()
   messageEvent* = "MESSAGE_CREATE"
 
-let config* = parseFile("bot.json")
-let token* = "Bot " & config["token"].getStr()
+when defined(discordcli):
+  import os
+
+  if paramCount() == 0:
+    quit "Please supply token parameter in the command line."
+
+  let token* = paramStr(1)
+else:
+  let config* = parseFile("bot.json")
+  let token* = "Bot " & config["token"].getStr()
 
 var listeners* = initTable[string, seq[Listener]]()
 

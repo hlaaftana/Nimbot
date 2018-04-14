@@ -79,7 +79,7 @@ proc filter*(handler: CommandHandler, text: string): string {.inline.} =
 # i tried writing it as a template but i ran into problems, template snippet below
 macro commands*(fullBody: untyped): untyped =
   result = newStmtList()
-  let handler = newIdentNode("handler")
+  let handler = ident"handler"
   result.add(quote do:
     var `handler` = CommandHandler(commands: @[]))
   for st in fullBody:
@@ -88,11 +88,13 @@ macro commands*(fullBody: untyped): untyped =
       of "on":
         let prefix = st[1]
         let body = st[2]
+        # if anyone knows how to do this identifier embedding better than i did here please tell me
+        # or dont and fix it in your clone that youre not gonna mention me in like you were already gonna do
         let
-          cmd = newIdentNode("cmd")
-          content = newIdentNode("content")
-          args = newIdentNode("args")
-          message = newIdentNode("message")
+          cmd = ident"cmd"
+          content = ident"content"
+          args = ident"args"
+          message = ident"message"
         result.add(quote do:
           block:
             var `cmd` = Command(prefix: `prefix`)
@@ -109,9 +111,9 @@ macro commands*(fullBody: untyped): untyped =
       of "predicate":
         let body = st[1]
         let
-          content = newIdentNode("content")
-          args = newIdentNode("args")
-          message = newIdentNode("message")
+          content = ident"content"
+          args = ident"args"
+          message = ident"message"
         result.add(quote do:
           block:
             proc cb(`content`, `args`: string, `message`: MessageEvent): bool =
@@ -122,7 +124,7 @@ macro commands*(fullBody: untyped): untyped =
       of "filter":
         let body = st[1]
         let
-          text = newIdentNode("text")
+          text = ident"text"
         result.add(quote do:
           block:
             proc cb(`text`: string): string =
@@ -133,6 +135,7 @@ macro commands*(fullBody: untyped): untyped =
   result.add(quote do: addListener(messageEvent, commandListener(`handler`)))
 
 when false:
+  # it could be so good!!!! but i cant get it to work
   template commands*(fullBody: untyped): untyped {.dirty.} =
     var handler = CommandHandler(commands: @[])
 

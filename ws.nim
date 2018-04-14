@@ -63,8 +63,8 @@ proc read* {.async.} =
     of Opcode.Close:
       # this part is unreachable without commenting out the `of Opcode.Close` branch in readData in websocket/shared
       # after that to get the message you need to add Opcode.Close to the `of Opcode.Text, Opcode.Binary` branch
-      let t = $d.data
-      echo "Close code: ", cast[uint16](t.cstring)
+      var t = $d.data
+      echo "Close code: ", cast[uint16](t[0].addr)
       echo "Close reason: ", t[2..^1]
       return
     of Opcode.Text:
@@ -77,5 +77,5 @@ proc read* {.async.} =
         if text.isNil:
           echo "Decompression failed, ignoring"
         else:
-          process parseJson(decomp)
+          process parseJson(text)
     else: continue
