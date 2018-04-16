@@ -9,13 +9,10 @@ filter:
 
 prefix "hey lover, "
 
-command "hows your day today":
+cmd "hows your day today":
   allow respond("\\*good lol\\*")
 
-command "say":
+cmd "say":
   allow respond("ok i will say that, " & args)
 
-addCommands()
-
-allow read()
-runForever()
+init()

@@ -2,7 +2,6 @@ import json, http, uri, common, strutils, macros
 
 type
   MessageEvent* = distinct JsonNode
-  MessageListener* = proc(obj: MessageEvent) 
 
   CommandProc*[T] = proc(cachedContent: string, args: string, obj: MessageEvent): T
 
@@ -17,9 +16,9 @@ type
     predicate*: CommandProc[bool]
     filter*: proc(text: string): string
     noMatch*: CommandProc[void]
+    listener*: Listener
 
-var handler*: CommandHandler
-handler.commands = @[]
+var handler* = CommandHandler(commands: @[])
 
 proc channelId*(msg: MessageEvent): string {.inline.} =
   JsonNode(msg)["channel_id"].getStr()
@@ -72,8 +71,10 @@ proc commandListener*(hndl: CommandHandler): Listener =
     if not matched and not hndl.noMatch.isNil:
       hndl.noMatch(cont, curr, MessageEvent(obj))
 
-template addCommands*: untyped =
-  addListener(messageEvent, commandListener(handler))
+proc addCommands* =
+  if handler.listener.isNil:
+    handler.listener = commandListener(handler)
+  addListener(messageEvent, handler.listener)
 
 proc filterText*(hndl: CommandHandler, text: string): string {.inline.} =
   if hndl.filter.isNil:
@@ -110,7 +111,7 @@ template predicate*(body: untyped): untyped =
       body
     handler.predicate = predProc
 
-template command*(alias: string, body: untyped): untyped =
+template cmd*(alias: string, body: untyped): untyped =
   block:
     proc cmdProc(content, args: string, message: MessageEvent) =
       template respond(cont: string, tts: bool = false): untyped {.inject.} =
