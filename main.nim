@@ -1,18 +1,21 @@
-import ws, asyncdispatch, messages, strutils
+include discordprelude
 
-commands:
-  filter:
-    result = text.multiReplace(
-      ("@everyone", "@\u200beveryone"),
-      ("@here", "@\u200beveryone"))
+import strutils
 
-  prefix "hey lover, "
+filter:
+  text.multiReplace(
+    ("@everyone", "@\u200beveryone"),
+    ("@here", "@\u200beveryone"))
 
-  on "hows your day today":
-    asyncCheck respond("\\*good lol\\*")
+prefix "hey lover, "
 
-  on "say":
-    asyncCheck respond("ok i will say that, " & args)
+command "hows your day today":
+  allow respond("\\*good lol\\*")
 
-asyncCheck read()
+command "say":
+  allow respond("ok i will say that, " & args)
+
+addCommands()
+
+allow read()
 runForever()

@@ -18,6 +18,9 @@ type
     filter*: proc(text: string): string
     noMatch*: CommandProc[void]
 
+var handler*: CommandHandler
+handler.commands = @[]
+
 proc channelId*(msg: MessageEvent): string {.inline.} =
   JsonNode(msg)["channel_id"].getStr()
 
@@ -34,26 +37,26 @@ template reply*(msg: MessageEvent, content: string, tts: bool = false): auto =
   sendMessage(msg.channelId, content, tts)
 
 # template because addListener needs to be top level to be safe
-proc commandListener*(handler: CommandHandler): Listener =
+proc commandListener*(hndl: CommandHandler): Listener =
   result = proc(obj: JsonNode) =
     let msg = MessageEvent(obj)
     var matched: bool
     let cont = msg.content
     var curr = cont
-    let hf = handler.predicate
+    let hf = hndl.predicate
     if not hf.isNil and not hf(cont, curr, msg):
       return
-    let hp = handler.prefix
+    let hp = hndl.prefix
     if not hp.isNil:
       if not curr.startsWith(hp):
         return
       else:
         curr.removePrefix(hp)
-    for cmd in handler.commands:
+    for cmd in hndl.commands:
       let p = cmd.prefix
       if curr.startsWith(p):
         var args: string
-        if handler.allowMultiple:
+        if hndl.allowMultiple:
           args = curr
         else:
           args.shallowCopy(curr)
@@ -64,109 +67,61 @@ proc commandListener*(handler: CommandHandler): Listener =
           if not ended:
             args = args.strip(trailing = false)
           cmd.callback(cont, args, MessageEvent(obj))
-          if not handler.allowMultiple:
+          if not hndl.allowMultiple:
             return
-    if not matched and not handler.noMatch.isNil:
-      handler.noMatch(cont, curr, MessageEvent(obj))
+    if not matched and not hndl.noMatch.isNil:
+      hndl.noMatch(cont, curr, MessageEvent(obj))
 
-proc filter*(handler: CommandHandler, text: string): string {.inline.} =
-  if handler.filter.isNil:
+template addCommands*: untyped =
+  addListener(messageEvent, commandListener(handler))
+
+proc filterText*(hndl: CommandHandler, text: string): string {.inline.} =
+  if hndl.filter.isNil:
     result = text
   else:
-    result = (handler.filter)(text)
+    result = (hndl.filter)(text)
 
-# i very recently started writing macros, i dont know how to make this prettier
-# i tried writing it as a template but i ran into problems, template snippet below
-macro commands*(fullBody: untyped): untyped =
-  result = newStmtList()
-  let handler = ident"handler"
-  result.add(quote do:
-    var `handler` = CommandHandler(commands: @[]))
-  for st in fullBody:
-    if st.kind in CallNodes:
-      case $st[0]
-      of "on":
-        let prefix = st[1]
-        let body = st[2]
-        # if anyone knows how to do this identifier embedding better than i did here please tell me
-        # or dont and fix it in your clone that youre not gonna mention me in like you were already gonna do
-        let
-          cmd = ident"cmd"
-          content = ident"content"
-          args = ident"args"
-          message = ident"message"
-        result.add(quote do:
-          block:
-            var `cmd` = Command(prefix: `prefix`)
-            proc cb(`content`, `args`: string, `message`: MessageEvent) =
-              template respond(cont: string, tts: bool = false): untyped =
-                reply(`message`, filter(`handler`, cont), tts)
-              `body`
-            `cmd`.callback = CommandProc[void](cb)
-            `handler`.commands.add(`cmd`))
-      of "prefix":
-        let prefix = st[1]
-        result.add(quote do:
-          `handler`.prefix = `prefix`)
-      of "predicate":
-        let body = st[1]
-        let
-          content = ident"content"
-          args = ident"args"
-          message = ident"message"
-        result.add(quote do:
-          block:
-            proc cb(`content`, `args`: string, `message`: MessageEvent): bool =
-              template respond(cont: string, tts: bool = false) =
-                reply(message, filter(`handler`, cont), tts)
-              `body`
-            `handler`.predicate = cb)
-      of "filter":
-        let body = st[1]
-        let
-          text = ident"text"
-        result.add(quote do:
-          block:
-            proc cb(`text`: string): string =
-              `body`
-            `handler`.filter = cb)
-      else: result.add(st)
-    else: result.add(st)
-  result.add(quote do: addListener(messageEvent, commandListener(`handler`)))
+template prefix*(s: string): untyped =
+  handler.prefix = s
 
-when false:
-  # it could be so good!!!! but i cant get it to work
-  template commands*(fullBody: untyped): untyped {.dirty.} =
-    var handler = CommandHandler(commands: @[])
+template filter*(body: untyped): untyped =
+  block:
+    proc filterProc(text: string): string =
+      let text {.inject.} = text
+      body
+    handler.filter = filterProc
 
-    # says reply has to be discarded even if you wrap respond with asyncCheck
-    template command(p, body: untyped): untyped {.dirty.} =
-      block:
-        var cmd = Command(prefix: p)
-        proc cb(content, args: string, message: MessageEvent) =
-          template respond(cont: string, tts: bool = false) =
-            reply(message, filter(handler, cont), tts)
-          body
-        cmd.callback = CommandProc[void](cb)
-        handler.commands.add(cmd)
+template filter*(name, body: untyped): untyped =
+  block:
+    proc filterProc(text: string): string =
+      let `name` {.inject.} = text
+      body
+    handler.filter = filterProc
 
-    template prefix(p: untyped): untyped =
-      handler.prefix = p
+template predicate*(body: untyped): untyped =
+  block:
+    proc predProc(content, args: string, message: MessageEvent): bool =
+      template respond(cont: string, tts: bool = false): untyped {.inject.} =
+        reply(message, filterText(handler, cont), tts)
+      let
+        content {.inject, used.} = content
+        args {.inject, used.} = args
+        message {.inject, used.} = message
+      body
+    handler.predicate = predProc
 
-    template predicate(body: untyped): untyped {.dirty.} =
-      block:
-        proc cb(content, args: string, message: MessageEvent): bool =
-          template respond(cont: string, tts: bool = false) =
-            reply(message, filter(handler, cont), tts)
-          body
-        handler.predicate = CommandProc[bool](cb)
-
-    # gives both unknown identifier text and unknown identifier result
-    template filter(body: untyped): untyped {.dirty.} =
-      proc cb(text: string): string =
-        body
-      handler.filter = cb
-
-    fullBody
-
-    addListener(messageEvent, commandListener(handler))
+template command*(alias: string, body: untyped): untyped =
+  block:
+    proc cmdProc(content, args: string, message: MessageEvent) =
+      template respond(cont: string, tts: bool = false): untyped {.inject.} =
+        reply(message, filterText(handler, cont), tts)
+      let
+        content {.inject, used.} = content
+        args {.inject, used.} = args
+        message {.inject, used.} = message
+      body
+    let cmd = Command(prefix: alias, callback: cmdProc)
+    if handler.commands.isNil:
+      handler.commands = @[cmd]
+    else:
+      handler.commands.add(cmd)
