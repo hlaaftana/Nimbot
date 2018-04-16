@@ -7,7 +7,7 @@ import
 when defined(discordCompress): from zip/zlib import uncompress
 
 let gateway* = get(api / "gateway")["url"].getStr().parseUri().hostname
-let ws* = waitFor newAsyncWebsocket(
+let wsClient* = waitFor newAsyncWebsocket(
   "wss://" & gateway & ":443/?encoding=json&v=6",
   ctx = newContext(verifyMode = CVerifyNone))
 
@@ -15,7 +15,7 @@ var lastSeq* = 0
 var sessionId*: string
 
 proc send*(data: JsonNode) {.async.} =
-  await ws.sock.sendText($data, true)
+  await wsClient.sock.sendText($data, true)
 
 template sendOp(op: int, data: untyped): auto =
   send(%*{
@@ -36,7 +36,7 @@ proc identify* {.async.} =
   })
 
 proc heartbeat*(interval: int) {.async.} =
-  while not ws.sock.isClosed:
+  while not wsClient.sock.isClosed:
     asyncCheck sendOp(1, lastSeq)
     await sleepAsync(interval)
 
@@ -57,15 +57,9 @@ proc process*(data: JsonNode) =
   else: discard
 
 proc read* {.async.} =
-  while not ws.sock.isClosed:
-    let d = await ws.sock.readData(true)
+  while not wsClient.sock.isClosed:
+    let d = await wsClient.sock.readData(true)
     case d.opcode
-    of Opcode.Close:
-      # this part is unreacheable now, cuz i added it to websocket.nim
-      var t = $d.data
-      echo "Close code: ", cast[ptr uint16](t[0].addr)[]
-      echo "Close reason: ", t[2..^1]
-      return
     of Opcode.Text:
       let text = d.data
       let json = parseJson(text)

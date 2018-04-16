@@ -1,11 +1,11 @@
-include discordprelude
-
 import strutils
+include discord/prelude
 
 filter:
-  text.multiReplace(
-    ("@everyone", "@\u200beveryone"),
-    ("@here", "@\u200beveryone"))
+  text.multiReplace({
+    "@everyone": "@\u200beveryone",
+    "@here": "@\u200beveryone"
+  })
 
 prefix "hey lover, "
 

@@ -6,9 +6,9 @@ http.headers = newHttpHeaders({"Authorization": token})
 proc parseResponse*(resp: AsyncResponse): JsonNode =
   result = parseJson(waitFor resp.body)
 
-template get*(uri: Uri): JsonNode =
+proc get*(uri: Uri): JsonNode =
   parseJson(waitFor http.getContent($uri))
 
 let postHeaders = newHttpHeaders({"Content-Type": "application/json"})
-template post*(uri: Uri, data: JsonNode): Future[AsyncResponse] =
+proc post*(uri: Uri, data: JsonNode): Future[AsyncResponse] =
   http.request($uri, HttpPost, $data, postHeaders)

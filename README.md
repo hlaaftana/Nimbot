@@ -1,26 +1,43 @@
 # pkpsgpsg
-Basic discord bot in Nim 0.18.0. Stands for Pun Krk PgPSspspsğgspsğgpsğgspgğs Sick Gore Pun2 Some Gor. Now say it after me. Pack Passage Passage. Pessage Pessage.
+Discord bot in Nim 0.18.0. Stands for Pun K Psrps So Gory Pthat Someone Goe'daway. Pack Passage Passage. Pessage Pessage.
 
-Now you might be like "Wow i found this niche called nim, i should write a discord library for it
-so people would like me, but i should search on github whether someone made it first already first"
-or maybe youre like "nim is a cool language i should write a discord bot in it.".".".". Either way,
-youre in the right store, at the right time? I dont even fucking care Plagayariyese the entire repo
-and never mention me if you want to but its not like i dont want to be associated with this
+So you found some discord libraries in nim on GitHub cuz you wanted to write a bot. You didn't like any of them because they didn't work or all of them have their own forks of websocket.nim in their repos or they're all too OOP or they just suck or whatever. Take a look at mine. Tho this isnt a library but it works and is minimal tm.
+You even want some code is that what i hear???????
 
-Requires [websocket](https://github.com/niv/websocket.nim)@#HEAD as of March 29 2018, and for optional probably not working compression you can get [zip](https://github.com/nim-lang/zip) and hope for the best
+```nim
+import strutils
+include discord/prelude
 
-So its as easy as
+prefix("!")
+
+filter:
+  text.multiReplace {
+    "@everyone": "@\u200beveryone",
+    "@here": "@\u200beveryone"
+  }
+
+cmd "say":
+  allow respond(args) # allow is alias for asyncCheck for ignoring result of async procs
+
+init()
+```
+
+Installation:
 
 ```
 git clone https://github.com/hlaaftana/pkpsgpsg
 cd pkpsgpsg
-nimble install websocket@#HEAD
+nimble install websocket@#HEAD # websocket has some issues so its important to get the latest version possible
 
 nim c -d:ssl main
 ./main # file called bot.json with {"token": <token>} has to be in the same folder
 
 # or
 
-nim c -d:ssl -d:discordcli main
+nim c -d:ssl -d:discordcliconfig main
 ./main <token>
 ```
+
+For compression if you want, you can get [zip](https://github.com/nim-lang/zip) and zlib1.dll and `-d:discordcompress` and hope for the best cuz it probably wont work right now.
+
+If you don't want to write a bot and want a general API for discord, look at the http and ws modules and get what you need.
