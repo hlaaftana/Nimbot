@@ -34,7 +34,7 @@ nim c -d:ssl main
 
 # or
 
-nim c -d:ssl -d:discordcliconfig main
+nim c -d:ssl -d:discordclitoken main
 ./main <token>
 ```
 
