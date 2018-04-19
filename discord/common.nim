@@ -1,6 +1,14 @@
-import uri, tables, json
+import uri, tables, json, httpclient, websocket
 
 type Listener* = proc(node: JsonNode)
+
+type DiscordClient* = ref object
+  token*: string
+  http*: AsyncHttpClient
+  ws*: AsyncWebSocket
+  listeners*: Table[string, seq[Listener]]
+  sessionId*: string
+  lastSeq*: int
 
 const configFile* = when defined(discordconfig): discordConfigFile else: "bot.json"
 
@@ -23,7 +31,9 @@ const
   api* = "https://discordapp.com/api/v6/".parseUri()
   messageEvent* = "MESSAGE_CREATE"
 
-var listeners* = initTable[string, seq[Listener]]()
+let client* = new DiscordClient
+client.listeners = initTable[string, seq[Listener]]()
+client.token = token
 
 proc addListener*[T: proc](e: string, a: T) =
   let a =
@@ -31,7 +41,10 @@ proc addListener*[T: proc](e: string, a: T) =
       a
     else:
       Listener(a)
-  listeners.withValue(e, x) do:
+  client.listeners.withValue(e, x) do:
     x[].add(a)
   do:
-    listeners[e] = @[a]
+    client.listeners[e] = @[a]
+
+client.http = newAsyncHttpClient(discordUserAgent)
+client.http.headers = newHttpHeaders({"Authorization": token})

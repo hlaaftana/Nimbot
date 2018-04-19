@@ -27,7 +27,7 @@ Installation:
 ```
 git clone https://github.com/hlaaftana/pkpsgpsg
 cd pkpsgpsg
-nimble install websocket@#HEAD # its important to get the latest version possible right now
+nimble install websocket@#HEAD
 
 nim c -d:ssl main
 ./main # file called bot.json with {"token": <token>} has to be in the same folder
