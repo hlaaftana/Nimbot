@@ -8,7 +8,7 @@ You even want some code is that what i hear???????
 import strutils
 include discord/prelude
 
-prefix("!")
+prefix "!"
 
 filter:
   text.multiReplace {
@@ -17,7 +17,7 @@ filter:
   }
 
 cmd "say":
-  allow respond(args) # allow is alias for asyncCheck for ignoring result of async procs
+  asyncCheck respond(args) # asyncCheck is how you discard async calls
 
 init()
 ```

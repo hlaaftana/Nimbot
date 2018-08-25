@@ -10,9 +10,9 @@ filter:
 prefix "hey lover, "
 
 cmd "hows your day today":
-  allow respond("\\*good lol\\*")
+  asyncCheck respond("\\*good lol\\*")
 
 cmd "say":
-  allow respond("ok i will say that, " & args)
+  asyncCheck respond("ok i will say that, " & args)
 
 init()

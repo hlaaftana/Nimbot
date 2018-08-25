@@ -27,11 +27,12 @@ else:
   let token* = "Bot " & config["token"].getStr()
 
 const
-  discordUserAgent* = "NimBot (1.0 https://github.com/hlaaftana)"
+  discordUserAgent* = "NimBot (1.0 https://github.com/hlaaftana/pkpsgpsg)"
   api* = "https://discordapp.com/api/v6/".parseUri()
   messageEvent* = "MESSAGE_CREATE"
 
-let client* = new DiscordClient
+var client*: DiscordClient
+new(client)
 client.listeners = initTable[string, seq[Listener]]()
 client.token = token
 

@@ -14,16 +14,16 @@ client.lastSeq = 0
 proc send*(data: JsonNode) {.async.} =
   await client.ws.sendText($data, masked = true)
 
-template sendOp(op: int, data: untyped): auto =
+template send(op: int, data: untyped): auto =
   send(%*{
     "op": op,
     "d": data
   })
 
 proc identify* {.async.} =
-  asyncCheck sendOp(2, {
+  asyncCheck send(op = 2, {
     "token": token,
-    "compress": when defined(discordCompress): true else: false,
+    "compress": defined(discordCompress),
     "large_threshold": 250,
     "properties": {
       "$os": hostOS,
@@ -34,7 +34,7 @@ proc identify* {.async.} =
 
 proc heartbeat*(interval: int) {.async.} =
   while not client.ws.sock.isClosed:
-    asyncCheck sendOp(1, client.lastSeq)
+    asyncCheck send(op = 1, client.lastSeq)
     await sleepAsync(interval)
 
 proc process*(data: JsonNode) =
