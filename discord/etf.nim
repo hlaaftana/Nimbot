@@ -1,18 +1,34 @@
-import tables
+import streams
+
+const
+  tagFloat64 = 70
+  tagBitBinary = 77
+  tagAtomCacheRef = 82
+  tagUint8 = 97
+  tagInt32 = 98
+  tagFloatString = 99
+  tagAtom = 100
+  tagReference = 101
+  tagPort = 102
+  tagPid = 103
+  tagSmallTuple = 104
+  tagLargeTuple = 105
+  tagNil = 106
+  tagString = 107
+  tagList = 108
+  tagBinary = 109
+  tagSmallBigInt = 110
+  tagLargeBigInt = 111
+  tagNewReference = 114
+  tagSmallAtom = 115
+  tagMap = 116
+  tagAtomUtf8 = 118
+  tagSmallAtomUtf8 = 119
+  tagTerm = 131
 
 type
-  EtfError* = enum
-    etfNoError, etfPremature, etfNoVersion
-
-  TermTag* = enum
-    ttUnknown = 0, ttFloat64 = 70, ttBitBinary = 77, ttAtomCacheRef = 82,
-    ttUint8 = 97, ttInt32, ttFloatString, ttAtom,
-    ttReference, ttPort, ttPid, ttSmallTuple, ttLargeTuple, ttNil, ttString, ttList,
-    ttBinary, ttSmallBigInt, ttLargeBigInt, ttNewReference = 114, ttSmallAtom,
-    ttMap, ttAtomUtf8 = 118, ttSmallAtomUtf8, ttTerm = 131
-
   BigInt* = object
-    sign*: range[-1..1]
+    negative*: bool
     data*: seq[byte]
 
   BitBinary* = object
@@ -33,51 +49,47 @@ type
 
   Term* = ref TermObj
   TermObj* {.acyclic.} = object
-    case tag*: TermTag
-    of ttTerm:
+    case tag*: byte
+    of tagTerm:
       term*: Term
-    of ttFloat64:
+    of tagFloat64:
       f64*: float64
-    of ttBitBinary:
+    of tagBitBinary:
       bb*: BitBinary
-    of ttUint8:
+    of tagUint8:
       u8*: byte
-    of ttInt32:
+    of tagInt32:
       i32*: int32
-    of ttFloatString:
+    of tagFloatString:
       flstr*: string
-    of ttAtomCacheRef, ttAtom, ttSmallAtom, ttAtomUtf8, ttSmallAtomUtf8:
+    of tagAtomCacheRef, tagAtom, tagSmallAtom, tagAtomUtf8, tagSmallAtomUtf8:
       atom*: Atom
-    of ttReference:
+    of tagReference:
       reference*: Reference
-    of ttPort:
+    of tagPort:
       port*: Reference
-    of ttPid:
+    of tagPid:
       pid*: Reference
       serial*: uint32
-    of ttSmallTuple, ttLargeTuple:
+    of tagSmallTuple, tagLargeTuple:
       tup*: seq[Term]
-    of ttMap:
+    of tagMap:
       map*: seq[(Term, Term)]
-    of ttNil:
+    of tagNil:
       nil
-    of ttString:
+    of tagString:
       str*: string
-    of ttBinary:
+    of tagBinary:
       bin*: string
-    of ttSmallBigInt, ttLargeBigInt:
+    of tagSmallBigInt, tagLargeBigInt:
       bigint*: BigInt
-    of ttList:
+    of tagList:
       lst*: seq[Term]
-    of ttNewReference:
+    of tagNewReference:
       newRef*: NewReference
     else: discard
 
-proc parseEtf*(data: string, compressed = false): tuple[error: EtfError, term: Term] =
-  template error(err) =
-    result.error = err
-    return
-
+proc parseEtf*(data: string, compressed = false): Term =
   template next: byte =
     last = data[index].byte
     inc index
@@ -87,7 +99,7 @@ proc parseEtf*(data: string, compressed = false): tuple[error: EtfError, term: T
     raise newException(Exception, "compressed ETF is currently unsupported")
 
   if data.len == 0:
-    error(etfPremature)
+    return
 
   var
     index = 0
@@ -96,7 +108,7 @@ proc parseEtf*(data: string, compressed = false): tuple[error: EtfError, term: T
     atomCache: seq[(byte, string)]
 
   if next != 131:
-    error(etfNoVersion)
+    raise newException(IOError, "did not expect at start of term char: " & last.char)
 
   block header:
     if next != 68:
@@ -131,99 +143,152 @@ proc parseEtf*(data: string, compressed = false): tuple[error: EtfError, term: T
         for i in 0..<length.int:
           atomCache[ni][1][i] = next.char
 
-  template getString(leng): string =
-    var res = newString(leng)
-    for m in res.mitems:
-      m = next.char
-    res
-
-  proc getTerm: Term =
+  proc getagerm: Term =
+    if next != 131:
+      raise newException(IOError, "did not expect at start of term char: " & last.char)
     result.new()
-    result.tag = TermTag(next)
+    result.tag = next
     case result.tag
-    of ttAtomCacheRef:
+    of tagAtomCacheRef:
       result.atom = atomCache[next.int][1].Atom
-    of ttUint8:
+    of tagUint8:
       result.u8 = next
-    of ttInt32:
+    of tagInt32:
       result.i32 = (next.int32 shl 24) and (next.int32 shl 16) and (next.int32 shl 8) and (next.int32)
-    of ttFloatString:
-      result.flstr = getString(31)
-    of ttReference:
-      result.reference.node = getTerm().atom
+    of tagFloatString:
+      result.flstr = newString(31)
+      for m in result.flstr.mitems:
+        m = next.char
+    of tagReference:
+      result.reference.node = getagerm().atom
       result.reference.id = (next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)
       result.reference.creation = next
-    of ttPort:
-      result.port.node = getTerm().atom
+    of tagPort:
+      result.port.node = getagerm().atom
       result.port.id = (next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)
       result.port.creation = next
-    of ttPid:
-      result.pid.node = getTerm().atom
+    of tagPid:
+      result.pid.node = getagerm().atom
       result.pid.id = (next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)
       result.serial = (next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)
       result.pid.creation = next
-    of ttSmallTuple:
+    of tagSmallTuple:
       result.tup.newSeq(next.int)
       for m in result.tup.mitems:
-        m = getTerm()
-    of ttLargeTuple:
+        m = getagerm()
+    of tagLargeTuple:
       result.tup.newSeq(int((next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)))
       for m in result.tup.mitems:
-        m = getTerm()
-    of ttMap:
+        m = getagerm()
+    of tagMap:
       result.map.newSeq(int((next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)))
       for m in result.map.mitems:
-        m = (getTerm(), getTerm())
-    of ttNil:
+        m = (getagerm(), getagerm())
+    of tagNil:
       discard
-    of ttString:
+    of tagString:
       result.str = newString(int((next.uint16 shl 8) and next.uint16))
       for m in result.str.mitems:
         m = next.char
-    of ttList:
+    of tagList:
       result.lst.newSeq(int((next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)) + 1)
       for m in result.lst.mitems:
-        m = getTerm()
-      result.lst.add(getTerm())
-    of ttBinary:
+        m = getagerm()
+      result.lst.add(getagerm())
+    of tagBinary:
       result.bin = newString(int((next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)))
       for m in result.bin.mitems:
         m = next.char
-    of ttSmallBigInt:
+    of tagSmallBigInt:
       result.bigInt.data.newSeq(next.int)
-      result.bigInt.sign = next
+      result.bigInt.negative = next.bool
       for m in result.bigInt.data.mitems:
         m = next
-    of ttLargeBigInt:
+    of tagLargeBigInt:
       result.bigInt.data.newSeq(int((next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)))
-      result.bigInt.sign = next
+      result.bigInt.negative = next.bool
       for m in result.bigInt.data.mitems:
         m = next
-    of ttNewReference:
+    of tagNewReference:
       result.newRef.ids.newSeq(int((next.uint16 shl 8) and next.uint16))
-      result.newRef.node = getTerm().atom
+      result.newRef.node = getagerm().atom
       result.newRef.creation = next
       for m in result.newRef.ids.mitems:
         m = (next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)
-    of ttBitBinary:
+    of tagBitBinary:
       result.bb.data.newSeq(int((next.uint32 shl 24) and (next.uint32 shl 16) and (next.uint32 shl 8) and (next.uint32)))
       result.bb.bits = next
       for m in result.bb.data.mitems:
         m = next
-    of ttFloat64:
+    of tagFloat64:
       var p = (next.uint64 shl 56) and (next.uint64 shl 48) and (next.uint64 shl 40) and
         (next.uint64 shl 32) and (next.uint64 shl 24) and (next.uint64 shl 16) and
         (next.uint64 shl 8) and next.uint64
       result.f64 = cast[ptr float64](addr p)[]
-    of ttAtomUtf8, ttAtom:
+    of tagAtomUtf8, tagAtom:
       result.atom = newString(int((next.uint16 shl 8) and next.uint16)).Atom
       for m in result.atom.string.mitems:
         m = next.char
-    of ttSmallAtomUtf8, ttSmallAtom:
+    of tagSmallAtomUtf8, tagSmallAtom:
       result.atom = newString(next.int).Atom
       for m in result.atom.string.mitems:
         m = next.char
     else: discard
 
 
-  result.term = getTerm()
+  result.term = getagerm()
+
+proc toBytes*(term: Term): string =
+  var stream = newStringStream()
+  stream.write(131u8)
+  stream.write(term.tag)
+  case term.tag
+  of tagFloat64:
+    stream.write(term.f64)
+  of tagUint8:
+    stream.write(term.u8)
+  of tagInt32:
+    stream.write(term.i32)
+  of tagAtom, tagAtomUtf8:
+    stream.write(term.atom.string.len.uint16)
+    stream.write(term.atom.string)
+  of tagSmallAtom, tagSmallAtomUtf8:
+    stream.write(term.atom.string.len.uint8)
+    stream.write(term.atom.string)
+  of tagSmallTuple:
+    stream.write(term.tup.len.uint8)
+    for m in term.tup:
+      stream.write(toBytes(m))
+  of tagLargeTuple:
+    stream.write(term.tup.len.uint32)
+    for m in term.tup:
+      stream.write(toBytes(m))
+  of tagMap:
+    stream.write(term.map.len.uint32)
+    for m in term.map:
+      stream.write(toBytes(m[0]))
+      stream.write(toBytes(m[1]))
+  of tagNil:
+    discard
+  of tagString:
+    stream.write(term.str.len.uint16)
+    stream.write(term.str)
+  of tagBinary:
+    stream.write(term.bin.len.uint32)
+    stream.write(term.bin)
+  of tagSmallBigInt:
+    stream.write(term.bigint.data.len.uint8)
+    stream.write(term.bigint.negative.byte)
+    for m in term.bigint.data:
+      stream.write(m)
+  of tagLargeBigInt:
+    stream.write(term.bigint.data.len.uint32)
+    stream.write(term.bigint.negative.byte)
+    for m in term.bigint.data:
+      stream.write(m)
+  of tagList:
+    stream.write(term.lst.len.uint32 - 1)
+    for m in term.lst:
+      stream.write(toBytes(m))
+  else: raise newException(Exception, "unsupported term output type " & $term.tag)
+  result = stream.data

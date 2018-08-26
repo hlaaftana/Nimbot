@@ -1,11 +1,15 @@
-import httpclient, asyncdispatch, json, uri, common
+import httpclient, asyncdispatch, json, uri
 
 proc parseResponse*(resp: AsyncResponse): JsonNode =
   result = parseJson(waitFor resp.body)
 
-proc get*(uri: Uri): JsonNode =
-  parseJson(waitFor client.http.getContent($uri))
+proc get*(http: AsyncHttpClient, uri: Uri): JsonNode =
+  parseJson(waitFor http.getContent($uri))
 
-let postHeaders = newHttpHeaders({"Content-Type": "application/json"})
-proc post*(uri: Uri, data: JsonNode): Future[AsyncResponse] =
-  client.http.request($uri, HttpPost, $data, postHeaders)
+template postHeaders*: HttpHeaders = newHttpHeaders({"Content-Type": "application/json"})
+
+proc post*(http: AsyncHttpClient, uri: Uri, data: JsonNode): Future[AsyncResponse] =
+  http.request($uri, HttpPost, $data, postHeaders)
+
+proc patch*(http: AsyncHttpClient, uri: Uri, data: JsonNode): Future[AsyncResponse] =
+  http.request($uri, HttpPatch, $data, postHeaders)

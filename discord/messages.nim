@@ -1,24 +1,7 @@
-import json, http, uri, common, strutils, macros
+import json, http, httpclient, uri, common, asyncdispatch
 
 type
   MessageEvent* = distinct JsonNode
-
-  CommandProc*[T] = proc(cachedContent: string, args: string, obj: MessageEvent): T
-
-  Command* = object
-    prefix*: string
-    callback*: CommandProc[void]
-
-  CommandHandler* = object
-    commands*: seq[Command]
-    allowMultiple*: bool
-    prefix*: string
-    predicate*: CommandProc[bool]
-    filter*: proc(text: string): string
-    noMatch*: CommandProc[void]
-    listener*: Listener
-
-var handler* = CommandHandler(commands: @[])
 
 proc channelId*(msg: MessageEvent): string {.inline.} =
   JsonNode(msg)["channel_id"].getStr()
@@ -26,103 +9,33 @@ proc channelId*(msg: MessageEvent): string {.inline.} =
 proc content*(msg: MessageEvent): string {.inline.} =
   JsonNode(msg)["content"].getStr()
 
-proc sendMessage*(channelId: string, content: string, tts: bool = false): auto =
+proc sendMessage*(http: AsyncHttpClient, channelId: string, content: string, tts = false): auto =
   var payload = newJObject()
   payload["content"] = %content
   if tts: payload["tts"] = %true
-  post(api / "channels" / channelId / "messages", payload)
+  http.post(api / "channels" / channelId / "messages", payload)
 
-template reply*(msg: MessageEvent, content: string, tts: bool = false): auto =
-  sendMessage(msg.channelId, content, tts)
+proc sendFile*(http: AsyncHttpClient, channelId: string, data, filename: string, content = "", tts = false): auto =
+  var multipart = newMultipartData()
+  if content.len != 0:
+    multipart.add("content", content)
+  if tts:
+    multipart.add("tts", "true")
+  multipart.add("file", data, filename = filename)
+  http.post($(api / "channels" / channelId / "messages"), multipart = multipart)
 
-# template because addListener needs to be top level to be safe
-proc commandListener*(hndl: CommandHandler): Listener =
-  result = proc(obj: JsonNode) =
-    let msg = MessageEvent(obj)
-    var matched: bool
-    let cont = msg.content
-    var curr = cont
-    let hf = hndl.predicate
-    if not hf.isNil and not hf(cont, curr, msg):
-      return
-    let hp = hndl.prefix
-    if not hp.isNil:
-      if not curr.startsWith(hp):
-        return
-      else:
-        curr.removePrefix(hp)
-    for cmd in hndl.commands:
-      let p = cmd.prefix
-      if curr.startsWith(p):
-        var args: string
-        if hndl.allowMultiple:
-          args = curr
-        else:
-          args.shallowCopy(curr)
-        args.removePrefix(p)
-        let ended = args.len == 0
-        if ended or args[0] in Whitespace:
-          matched = true
-          if not ended:
-            args = args.strip(trailing = false)
-          cmd.callback(cont, args, MessageEvent(obj))
-          if not hndl.allowMultiple:
-            return
-    if not matched and not hndl.noMatch.isNil:
-      hndl.noMatch(cont, curr, MessageEvent(obj))
+template reply*(http: AsyncHttpClient, msg: MessageEvent, content: string, tts = false): auto =
+  http.sendMessage(msg.channelId, content, tts)
 
-proc addCommands* =
-  if handler.listener.isNil:
-    handler.listener = commandListener(handler)
-  addListener(messageEvent, handler.listener)
+proc typing*(http: AsyncHttpClient, channelId: string) =
+  discard waitFor(http.request($(api / "channels" / channelId / "typing"), HttpPost,
+    when NimMajor <= 18: "{}" else: ""))
 
-proc filterText*(hndl: CommandHandler, text: string): string {.inline.} =
-  if hndl.filter.isNil:
-    result = text
-  else:
-    result = (hndl.filter)(text)
+proc editMessage*(http: AsyncHttpClient, channelId, messageId: string, content: string, tts = false): auto =
+  var payload = newJObject()
+  payload["content"] = %content
+  if tts: payload["tts"] = %true
+  http.patch(api / "channels" / channelId / "messages" / messageId, payload)
 
-template prefix*(s: string): untyped =
-  handler.prefix = s
-
-template filter*(body: untyped): untyped =
-  block:
-    proc filterProc(text: string): string =
-      let text {.inject.} = text
-      body
-    handler.filter = filterProc
-
-template filter*(name, body: untyped): untyped =
-  block:
-    proc filterProc(text: string): string =
-      let `name` {.inject.} = text
-      body
-    handler.filter = filterProc
-
-template predicate*(body: untyped): untyped =
-  block:
-    proc predProc(content, args: string, message: MessageEvent): bool =
-      template respond(cont: string, tts: bool = false): untyped {.inject.} =
-        reply(message, filterText(handler, cont), tts)
-      let
-        content {.inject, used.} = content
-        args {.inject, used.} = args
-        message {.inject, used.} = message
-      body
-    handler.predicate = predProc
-
-template cmd*(alias: string, body: untyped): untyped =
-  block:
-    proc cmdProc(content, args: string, message: MessageEvent) =
-      template respond(cont: string, tts: bool = false): untyped {.inject.} =
-        reply(message, filterText(handler, cont), tts)
-      let
-        content {.inject, used.} = content
-        args {.inject, used.} = args
-        message {.inject, used.} = message
-      body
-    let cmd = Command(prefix: alias, callback: cmdProc)
-    if handler.commands.isNil:
-      handler.commands = @[cmd]
-    else:
-      handler.commands.add(cmd)
+proc edit*(http: AsyncHttpClient, node: JsonNode, content: string, tts = false): auto =
+  http.editMessage(node["channel_id"].getStr, node["id"].getStr, content, tts)
