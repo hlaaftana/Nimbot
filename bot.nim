@@ -24,9 +24,17 @@ proc evalGroovy(code: string): tuple[result, output, stacktrace: string, errorco
   except:
     discard
 
+proc filterText(text: string): string =
+  result = text.multiReplace({
+    "@everyone": "@\u200beveryone",
+    "@here": "@\u200beveryone"
+  })
+  if result.len >= 1_700:
+    result = "text is too big to post"
+
 proc main =
   var
-    handler: CommandHandler
+    handler = CommandHandler(prefixes: @["v<", "v>"], commands: @[])
     ready: JsonNode
     dispatcher: ListenerDispatcher
     instance: DiscordInstance
@@ -37,24 +45,31 @@ proc main =
   dispatcher.addListener("MESSAGE_CREATE") do (node: JsonNode):
     handler.handleCommand(MessageEvent(node))
 
+  template cmd(alias: string, body: untyped, infoBody: untyped) =
+    proc msgProc(content, args: string, message: MessageEvent) {.gensym.} =
+      let
+        content {.inject, used.} = content
+        args {.inject, used.} = args
+        message {.inject, used.} = message
+      body
+    block:
+      var command {.inject.} = Command(prefix: alias, callback: msgProc)
+      template info(str: string) {.used.} =
+        command.info = str
+      infoBody
+      handler.commands.add(command)
+
+  template cmd(alias: string, body: untyped) =
+    cmd(alias, body): discard
+
   template respond(cont: string, tts = false): untyped =
-    instance.http.reply(message, filterText(handler, cont), tts)
+    instance.http.reply(message, filterText(cont), tts)
 
   template typing() =
     instance.http.typing(message.channelId)
 
-  filter:
-    result = text.multiReplace({
-      "@everyone": "@\u200beveryone",
-      "@here": "@\u200beveryone"
-    })
-    if result.len >= 1_700:
-      result = "text is too big to post"
-
-  predicate:
+  handler.predicate = proc(content, args: string, message: MessageEvent): bool =
     JsonNode(message)["author"]["id"] != ready["user"]["id"]
-
-  prefix "v<", "v>"
 
   cmd "cmds":
     var res = "cmds:"
@@ -98,7 +113,7 @@ nim version is """ & NimVersion)
       let name = escapeJson(a.next)[1..^2]
       var by: string
       case a.rest
-      of nil, "", "me":
+      of "", "me":
         by = JsonNode(message)["author"]["id"].getStr
       of "anyone":
         by = ""
@@ -231,7 +246,7 @@ nim version is """ & NimVersion)
     of "list":
       var by: string
       case a.rest
-      of nil, "", "me":
+      of "", "me":
         by = JsonNode(message)["author"]["id"].getStr
       of "anyone":
         by = ""
@@ -282,6 +297,10 @@ save list ID        -- lists saves of person with ID, can also be anyone or me`"
   cmd "gccollect":
     GC_fullCollect()
 
+  cmd "dumpresponse":
+    let resp = waitFor respond("test")
+    echo waitFor resp.body
+
   cmd "die":
     if JsonNode(message)["author"]["id"].getStr == "98457401363025920":
       quit(-1)
@@ -293,9 +312,10 @@ save list ID        -- lists saves of person with ID, can also be anyone or me`"
     let a = cpuTime()
     let m = waitFor respond(msg)
     let b = cpuTime()
+    let mbody = waitFor m.body
     msg.add("\nposting took " & $(b - a) & " seconds")
     let c = cpuTime()
-    let mn = parseJson(waitFor m.body)
+    let mn = parseJson(mbody)
     discard waitFor(instance.http.edit(mn, msg))
     let d = cpuTime()
     msg.add("\nediting took " & $(d - c) & " seconds")
