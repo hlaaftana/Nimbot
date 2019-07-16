@@ -12,7 +12,7 @@ when defined(discordCompress):
 
 when not defined(discordetf):
   proc send*(ws: AsyncWebSocket, data: JsonNode) {.async.} =
-    await ws.sendText($data, masked = true)
+    await ws.sendText($data)
 
   template send(ws: AsyncWebSocket, op: int, data: untyped): auto =
     ws.send(%*{

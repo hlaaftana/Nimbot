@@ -13,3 +13,6 @@ proc post*(http: AsyncHttpClient, uri: Uri, data: JsonNode): Future[AsyncRespons
 
 proc patch*(http: AsyncHttpClient, uri: Uri, data: JsonNode): Future[AsyncResponse] =
   http.request($uri, HttpPatch, $data, postHeaders)
+
+proc delete*(http: AsyncHttpClient, uri: Uri): Future[AsyncResponse] =
+  http.request($uri, HttpDelete, "", postHeaders)

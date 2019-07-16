@@ -1,19 +1,21 @@
-import httpclient, strutils, times, uri, json, asyncdispatch
-import discord/[discord, arguments, commands, http, messages, ws]
+import httpclient, strutils, times, uri, json,
+  asyncdispatch, tables, random
+import discord/[discord, arguments, commands, http, messages, ws], aternos
 
-proc evalNim(code: string, target = "c"): tuple[compileLog, log: string] =
+proc evalNim(code: string): tuple[compileLog, log: string] =
   let http = newAsyncHttpClient()
   try:
-    let js = %* {"code": code, "compilationTarget": "c"}
+    let js = %*{"code": code, "compilationTarget": "c"}
     let resp = waitFor http.post("https://play.nim-lang.org/compile", $js)
     let res = parseJson(waitFor resp.body)
     result = (res["compileLog"].getStr, res["log"].getStr)
   except:
     result = ("", "")
+  http.close()
 
 proc evalGroovy(code: string): tuple[result, output, stacktrace: string, errorcode: string] =
+  let http = newAsyncHttpClient()
   try:
-    let http = newAsyncHttpClient()
     let resp = waitFor http.request("https://groovyconsole.appspot.com/executor.groovy?script=" & encodeUrl(code), HttpPost,
       "{}")
     result.errorcode = $resp.code & "\n" & waitFor resp.body
@@ -23,6 +25,7 @@ proc evalGroovy(code: string): tuple[result, output, stacktrace: string, errorco
     result.stacktrace = res["stacktraceText"].getStr
   except:
     discard
+  http.close()
 
 proc filterText(text: string): string =
   result = text.multiReplace({
@@ -34,10 +37,12 @@ proc filterText(text: string): string =
 
 proc main =
   var
-    handler = CommandHandler(prefixes: @["v<", "v>"], commands: @[])
+    handler = CommandHandler(prefixes: @["v<", "v>", "v/"], commands: @[])
     ready: JsonNode
     dispatcher: ListenerDispatcher
     instance: DiscordInstance
+
+  let config = json.parseFile("bot.json")
 
   dispatcher.init()
   dispatcher.addListener("READY") do (node: JsonNode):
@@ -72,7 +77,7 @@ proc main =
     JsonNode(message)["author"]["id"] != ready["user"]["id"]
 
   cmd "cmds":
-    var res = "cmds:"
+    var res = "do v<info cmd for usage:"
     for c in handler.commands:
       res.add(' ')
       res.add(c.prefix)
@@ -282,7 +287,7 @@ nim version is """ & NimVersion)
       else:
         asyncCheck respond("no one had saves (?)")
     else:
-      asyncCheck respond("i dont have option '" & arg & "' tell me if it should be added")
+      asyncCheck respond("do v<info save")
   do:
     info """lets you save snippets of text
 usage:
@@ -296,10 +301,6 @@ save list ID        -- lists saves of person with ID, can also be anyone or me`"
 
   cmd "gccollect":
     GC_fullCollect()
-
-  cmd "dumpresponse":
-    let resp = waitFor respond("test")
-    echo waitFor resp.body
 
   cmd "die":
     if JsonNode(message)["author"]["id"].getStr == "98457401363025920":
@@ -364,7 +365,89 @@ save list ID        -- lists saves of person with ID, can also be anyone or me`"
   do:
     info "evaluates groovy code via groovyconsole.appspot.com"
 
-  init(dispatcher, json.parseFile("bot.json")["token"].getStr, instance)
+  var smashCharLists = initTable[string, seq[string]](4)
+
+  cmd "smashrand":
+    const chars = ["Mario", "Donkey Kong", "Link", "Samus", "Dark Samus", "Yoshi", "Kirby", "Fox", "Pikachu", "Luigi", "Ness", "Captain Falcon", "Jigglypuff", "Peach", "Daisy", "Bowser", "Ice Climbers", "Sheik", "Zelda", "Dr. Mario", "Pichu", "Falco", "Marth", "Lucina", "Young Link", "Ganondorf", "Mewtwo", "Roy", "Chrom", "Mr. Game & Watch", "Meta Knight", "Pit", "Dark Pit", "Zero Suit Samus", "Wario", "Snake", "Ike", "Pokemon Trainer", "Diddy Kong", "Lucas", "Sonic", "King Dedede", "Olimar", "Lucario", "R.O.B.", "Toon Link", "Wolf", "Villager", "Mega Man", "Wii Fit Trainer", "Rosalina & Luma", "Little Mac", "Greninja", "Palutena", "Pac-Man", "Robin", "Shulk", "Bowser Jr.", "Duck Hunt", "Ryu", "Ken", "Cloud", "Corrin", "Bayonetta", "Inkling", "Ridley", "Simon Belmont", "Richter", "King K. Rool", "Isabelle", "Incineroar", "Piranha Plant", "Joker"]
+    var chanId = message.channelId
+    var a = newArguments(args)
+    case a.next
+    of "":
+      try:
+        let list = smashCharLists[chanId]
+        randomize()
+        let chIndex = rand(list.len - 1)
+        let ch = list[chIndex]
+        smashCharLists[chanId].del(chIndex)
+        asyncCheck respond(ch)
+      except KeyError:
+        smashCharLists[chanId] = @chars
+        asyncCheck respond("i made a new list for you BA!")
+    of "show":
+      asyncCheck respond(try: smashCharLists[chanId].join(", ") except: "Default list: " & chars.join(", "))
+    of "remove":
+      if not smashCharLists.hasKey(chanId):
+        smashCharLists[chanId] = @chars
+      for name in a.rest.split(','):
+        let i = smashCharLists[chanId].find(name.strip)
+        if i != -1: smashCharLists[chanId].del(i)
+      asyncCheck respond("yes BA")
+    of "clear":
+      smashCharLists.del(chanId)
+      asyncCheck respond("thats a good idea, BA")
+    of "without":
+      smashCharLists[chanId] = @chars
+      for name in a.rest.split(','):
+        let i = smashCharLists[chanId].find(name.strip)
+        if i != -1: smashCharLists[chanId].del(i)
+      asyncCheck respond("uh huh, BA")
+    else:
+      asyncCheck respond("what BA?")
+  do:
+    info """makes a set of smash characters then picks by random and removes them
+usage:
+`smashrand` if no list exists, makes one with every character, otherwise picks from existing list
+`smashrand show` shows existing list, or the default list if no list exists
+`smashrand remove char` removes character from existing list, or makes a new list without the character
+`smashrand clear` clears list
+`smashrand without char1, char2` makes a new list without those characters"""
+
+  var aternos: Aternos
+
+  cmd "aternos":
+    if JsonNode(message)["author"]["id"].getStr != "98457401363025920":
+      return
+    var a = newArguments(args)
+    case a.next
+    of "connect":
+      let msg = parseJson(waitFor (waitFor respond("connecting")).body)
+      waitFor aternos.connect()
+      asyncCheck instance.http.edit(msg, "connected")
+      asyncCheck aternos.loop()
+    of "disconnect":
+      asyncCheck aternos.disconnect()
+      asyncCheck respond("disconnected")
+    of "queue":
+      asyncCheck respond("queue is currently " & aternos.queue)
+    of "status":
+      if a.next == "check":
+        aternos.lastStatus = waitFor aternos.request("status")
+        waitFor aternos.checkForConfirm()
+      if not aternos.lastStatus.isNil:
+        asyncCheck respond($aternos.lastStatus)
+    of "start":
+      let resp = waitFor aternos.request("start", query = @{"headstart": "0"})
+      asyncCheck respond($resp)
+    of "stop":
+      asyncCheck aternos.request("stop")
+      asyncCheck respond("probably stopped")
+    of "restart":
+      asyncCheck aternos.request("restart")
+      asyncCheck respond("probably restarted")
+    of "endpoint":
+      asyncCheck respond($(waitFor aternos.request(a.next)))
+
+  init(dispatcher, config["token"].getStr, instance)
   runForever()
 
 main()

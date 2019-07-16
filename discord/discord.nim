@@ -1,4 +1,4 @@
-import websocket, httpclient, common, http, ws, asyncdispatch, json, tables
+import websocket, httpclient, common, http, ws, asyncdispatch, json, tables, uri
 
 type DiscordInstance* = object
   ws*: AsyncWebSocket
@@ -15,7 +15,9 @@ proc init*(dispatcher: Dispatcher, token: string, instance: var DiscordInstance)
     instance.http.headers.add("Authorization", "Bot " & token)
   if instance.ws.isNil:
     if instance.gateway.len == 0:
-      instance.gateway = instance.http.get(api / "gateway")["url"].getStr().parseUri().hostname
+      let x = instance.http.get(api / "gateway")["url"].getStr()
+      echo x
+      instance.gateway = x.parseUri().hostname
     instance.ws = waitFor newAsyncWebsocketClient("wss://" & instance.gateway & ":443/?encoding=" & (when defined(etf): "etf" else: "json") & "&v=6")
   if instance.lastSeq.isNil:
     instance.lastSeq.new()

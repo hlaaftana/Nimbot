@@ -37,5 +37,8 @@ proc editMessage*(http: AsyncHttpClient, channelId, messageId: string, content: 
   if tts: payload["tts"] = %true
   http.patch(api / "channels" / channelId / "messages" / messageId, payload)
 
+proc deleteMessage*(http: AsyncHttpClient, channelId, messageId: string): auto =
+  http.delete(api / "channels" / channelId / "messages" / messageId)
+
 proc edit*(http: AsyncHttpClient, node: JsonNode, content: string, tts = false): auto =
   http.editMessage(node["channel_id"].getStr, node["id"].getStr, content, tts)
