@@ -50,8 +50,11 @@ proc request*(aternos: Aternos, path: string, meth = HttpGet, body = "",
     result = parseJson(body)
 
 proc checkForConfirm*(aternos: Aternos, status = aternos.lastStatus) {.async.} =
+  echo "d"
   echo status
+  echo "e"
   echo aternos.queuePending
+  echo "f"
   if aternos.queuePending and status["class"].getStr == "queueing" and
     status["queue"]["pending"].getStr != "pending":
     echo "a"

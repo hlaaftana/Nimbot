@@ -27,7 +27,7 @@ macro cmd*(name: untyped, body: untyped): untyped =
     cmd.node = body
   commands.add(cmd)
 
-macro nameInfoTable*: static[seq[(string, string)]] =
+macro nameInfoTable*: seq[(string, string)] =
   var t = newSeq[(string, string)](commands.len)
   for i in 0..<commands.len:
     t[i] = (commands[i].name, commands[i].info)
@@ -64,5 +64,4 @@ macro eachCommand*(message: MessageEvent, content, args: string, body: untyped):
       c.node)
     n.add(newProc(ident"commandBody", [bindSym"untyped"], b, nnkTemplateDef))
     n.add(body)
-    result.add(n)
-  echo repr(result)
+    result.add(newBlockStmt(n))
